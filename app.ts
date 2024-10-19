@@ -6,7 +6,7 @@ const app = new Hono();
 
 const baseurl = "https://www.rentomojo.com";
 
-app.get("/api/billingAndPayments", async (c) => {
+app.get("/api/billingAndPayments", async (c: any) => {
   const token = c.req.query("token");
   const userId = c.req.query("userId");
   const invoiceId = c.req.query("invoiceId");
@@ -148,7 +148,7 @@ app.get("/api/billingAndPayments", async (c) => {
 
 // Escalation
 
-app.post("/api/escalation", async (c) => {
+app.post("/api/escalation", async (c: any) => {
   try {
     const body = await c.req.json();
     const operation = c.req.query("operation");
@@ -174,7 +174,7 @@ app.post("/api/escalation", async (c) => {
   }
 });
 
-async function sendToSheety(c) {
+async function sendToSheety(c: any) {
   try {
     const body = await c.req.json();
     console.log("sendToSheety", body);
@@ -364,7 +364,7 @@ async function sendToSheety(c) {
   }
 }
 
-async function offlineHours(c) {
+async function offlineHours(c: any) {
   const body = await c.req.json();
 
   if (!body) {
@@ -409,7 +409,7 @@ async function offlineHours(c) {
 
 // Service Management
 
-app.get("/api/orderServiceManagement", async (c) => {
+app.get("/api/orderServiceManagement", async (c: any) => {
   const token = c.req.query("token");
   const operation = c.req.query("operation");
 
@@ -429,6 +429,8 @@ app.get("/api/orderServiceManagement", async (c) => {
         return await showServiceRequests(c, token);
       case "getDeliverySlots":
         return await getDeliverySlots(c, token);
+      case "getKYCStatus":
+        return await getKYCStatus(c, token);
       default:
         return c.json({ error: "Invalid operation" }, 400);
     }
@@ -438,7 +440,7 @@ app.get("/api/orderServiceManagement", async (c) => {
   }
 });
 
-app.post("/api/orderServiceManagement", async (c) => {
+app.post("/api/orderServiceManagement", async (c: any) => {
   const token = c.req.query("token");
   const operation = c.req.query("operation");
 
@@ -468,6 +470,76 @@ app.post("/api/orderServiceManagement", async (c) => {
     return c.json({ error: "Request failed", details: error.message }, 500);
   }
 });
+
+async function getKYCStatus(c: any, token: string) {
+  try {
+    const response = await fetch(
+      baseurl + "/api/Hyperverges/completionStatusV3",
+      {
+        headers: {
+          accept: "application/json, text/plain, */*",
+          "accept-language": "en-GB,en-US;q=0.9,en;q=0.8,hi;q=0.7",
+          authorization: token,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.log(response);
+      return c.json({ error: "Failed to fetch data" }, 500);
+    }
+
+    const text = await response.text();
+
+    try {
+      const data = JSON.parse(text);
+      const {
+        stepsCompleted,
+        totalSteps,
+        currentDocument,
+        evalResponse,
+        lastUpdatedAt,
+        professionType,
+      } = data;
+      let normalizedStatus = evalResponse.normalizedStatus;
+      let statusMap = evalResponse.statusMap;
+
+      const getStatusText = (statusMap, normalizedStatus) => {
+        for (let key in statusMap) {
+          if (statusMap[key].value === normalizedStatus) {
+            return statusMap[key].key;
+          }
+        }
+        return null;
+      };
+
+      const professionTypeMapping = {
+        100: "Working Professional",
+        200: "Self Employed",
+        300: "Freelancer",
+        500: "Student",
+        1337: "Not selected profession",
+        null: "Not selected profession",
+      };
+
+      let statusText = getStatusText(statusMap, normalizedStatus);
+      let profession = professionTypeMapping[professionType];
+
+      return c.json({
+        stepsCompleted,
+        totalSteps,
+        lastUpdatedAt,
+        currentDocument,
+        kycStatus: statusText,
+        professionType: profession,
+      });
+    } catch (error) {
+      return c.json({ error: "Failed to parse JSON response" }, 500);
+    }
+  } catch (error) {
+    return c.json({ error: "Request failed" }, 500);
+  }
+}
 
 async function getServiceRequests(c: any, token: string) {
   const response = await fetch(
@@ -707,7 +779,7 @@ async function cancelServiceRequest(c: any, token: string) {
 
 // Product Inventory
 
-app.get("/api/productInventory", async (c) => {
+app.get("/api/productInventory", async (c: any) => {
   const token = c.req.query("token");
   const operation = c.req.query("operation");
 
