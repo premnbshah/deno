@@ -151,28 +151,35 @@ app.get("/api/billingAndPayments", async (c: any) => {
 app.post("/api/escalation", async (c: any) => {
   try {
     const body = await c.req.json();
-    const operation = c.req.query("operation");
 
     if (!body) {
       return c.json({ error: "Body is required" }, 400);
     }
 
-    if (!operation) {
-      return c.json({ error: "Operation query parameter is required" }, 400);
-    }
-
-    if (operation === "sendToSheety") {
+    if (checkWorkingHours()) {
       return await sendToSheety(c);
-    } else if (operation === "offlineHours") {
-      return await offlineHours(c);
     } else {
-      return c.json({ error: "Invalid operation" }, 400);
+      return await offlineHours(c);
     }
   } catch (error) {
     console.error("Request failed:", error.message);
     return c.json({ error: "Request failed", details: error.message }, 500);
   }
 });
+
+function checkWorkingHours(): boolean {
+  const now = new Date();
+  const utcOffset = now.getTimezoneOffset();
+  const istOffset = 330;
+  const istTime = new Date(now.getTime() + (istOffset + utcOffset) * 60000);
+
+  const startHour = 9;
+  const endHour = 20;
+  const day = istTime.getDay();
+  const hour = istTime.getHours();
+
+  return day >= 0 && day <= 6 && hour >= startHour && hour < endHour;
+}
 
 async function sendToSheety(c: any) {
   try {
