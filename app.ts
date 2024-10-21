@@ -16,34 +16,6 @@ app.get("/api/billingAndPayments", async (c: any) => {
   }
 
   try {
-    // GetRentalDue
-    if (!userId && !invoiceId) {
-      const response = await fetch(baseurl + "/api/Dashboards/dashboardData", {
-        headers: {
-          accept: "application/json, text/plain, */*",
-          authorization: token,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch rental due data: ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-      return c.json({
-        type: "RentalDue",
-        data: {
-          pendingDuesText: data.pendingDuesText,
-          totalPendingRentalDueAmount: data.totalPendingRentalDueAmount,
-          totalPayableAmount: data.totalPayableAmount,
-          pendingLateFeeAmount: data.pendingLateFeeAmount,
-          rentoMoney: data.rentoMoney,
-        },
-      });
-    }
-
     // GetPendingDues
     if (userId && !invoiceId) {
       const response = await fetch(
@@ -98,45 +70,49 @@ app.get("/api/billingAndPayments", async (c: any) => {
 
     // GetUserInvoice
     if (userId && invoiceId) {
-      const response = await fetch(
-        baseurl +
-          `/api/RMUsers/${userId}/getUserLedgerInvoice?invoiceId=${invoiceId}&discardGstInvoiceDateCheck=true`,
-        {
-          headers: {
-            authorization: token,
-          },
+      try {
+        const response = await fetch(
+          baseurl +
+            `/api/RMUsers/${userId}/getUserLedgerInvoice?invoiceId=${invoiceId}&discardGstInvoiceDateCheck=true`,
+          {
+            headers: {
+              authorization: token,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          console.error("Failed to fetch data:", response.statusText);
+          return c.json({ error: "Failed to fetch data" }, 500);
         }
-      );
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch user invoice: ${response.statusText}`);
+        const data = await response.json();
+
+        const formattedData = {
+          id: data.id,
+          invoiceDate: data.invoiceDate,
+          userId: data.userId,
+          invoiceNumber: data.invoiceNumber,
+          address: data.address,
+          rentAmount: data.rentAmount,
+          paymentStatus: data.paymentStatus === 20 ? "Paid" : "Unpaid",
+          invoiceUrl: `${baseurl}/dashboard/my-subscriptions/${data.id}/rental-invoice`,
+          orderItemRents: data.orderItemRents.map((orderItemRent) => ({
+            rentAmount: orderItemRent.rentAmount,
+            billingCycleStartDate: orderItemRent.billingCycleStartDate,
+            billingCycleEndDate: orderItemRent.billingCycleEndDate,
+            dueDate: orderItemRent.dueDate,
+            rentalMonth: orderItemRent.rentalMonth,
+            productName: orderItemRent.orderItem.product.name,
+            orderUniqueId: orderItemRent.orderItem.order.uniqueId,
+          })),
+        };
+
+        return c.json(formattedData);
+      } catch (error) {
+        console.error("Request failed:", error.message);
+        return c.json({ error: "Request failed", details: error.message }, 500);
       }
-
-      const data = await response.json();
-      const formattedData = {
-        id: data.id,
-        invoiceDate: data.invoiceDate,
-        userId: data.userId,
-        invoiceNumber: data.invoiceNumber,
-        address: data.address,
-        rentAmount: data.rentAmount,
-        paymentStatus: data.paymentStatus === 20 ? "Paid" : "Unpaid",
-        invoiceUrl: `${baseurl}/dashboard/my-subscriptions/${data.id}/rental-invoice`,
-        orderItemRents: data.orderItemRents.map((orderItemRent) => ({
-          rentAmount: orderItemRent.rentAmount,
-          billingCycleStartDate: orderItemRent.billingCycleStartDate,
-          billingCycleEndDate: orderItemRent.billingCycleEndDate,
-          dueDate: orderItemRent.dueDate,
-          rentalMonth: orderItemRent.rentalMonth,
-          productName: orderItemRent.orderItem.product.name,
-          orderUniqueId: orderItemRent.orderItem.order.uniqueId,
-        })),
-      };
-
-      return c.json({
-        type: "UserInvoice",
-        data: formattedData,
-      });
     }
 
     return c.json({ error: "Invalid combination of parameters" }, 400);
@@ -782,27 +758,44 @@ async function createRepairTicket(c: any, token: string) {
 }
 
 async function cancelServiceRequest(c: any, token: string) {
-  const { serviceRequestId } = await c.req.json();
+  try {
+    const body = await c.req.json();
+    const { serviceRequestId } = body;
 
-  if (!serviceRequestId) {
-    return c.json({ error: "serviceRequestId is required" }, 400);
+    if (!serviceRequestId) {
+      return c.json(
+        { error: "serviceRequestId is required in the request body" },
+        400
+      );
+    }
+
+    const response = await fetch(
+      baseurl + "/api/ServiceRequests/cancelRequest",
+      {
+        method: "POST",
+        headers: {
+          authorization: token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ serviceRequestId }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Failed to cancel request:", errorText);
+      return c.json(
+        { error: "Failed to cancel request", details: errorText },
+        response.status
+      );
+    }
+
+    const result = await response.json();
+    return c.json(result);
+  } catch (error) {
+    console.error("Request failed:", error.message);
+    return c.json({ error: "Request failed", details: error.message }, 500);
   }
-
-  const response = await fetch(baseurl + "/api/ServiceRequests/cancelRequest", {
-    method: "POST",
-    headers: {
-      authorization: token,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ serviceRequestId }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to cancel service request: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  return c.json({ type: "CancelledServiceRequest", data: data });
 }
 
 // Product Inventory
