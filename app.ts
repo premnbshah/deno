@@ -437,8 +437,6 @@ app.get("/api/orderServiceManagement", async (c: any) => {
         return await getServiceRequests(c, token);
       case "showServiceRequests":
         return await showServiceRequests(c, token);
-      case "getDeliverySlots":
-        return await getDeliverySlots(c, token);
       case "getKYCStatus":
         return await getKYCStatus(c, token);
       default:
@@ -464,6 +462,8 @@ app.post("/api/orderServiceManagement", async (c: any) => {
 
   try {
     switch (operation) {
+      case "getDeliverySlots":
+        return await getDeliverySlots(c, token);
       case "bookCssSlot":
         return await bookCssSlot(c, token);
       case "rescheduleRequest":
@@ -603,33 +603,51 @@ async function showServiceRequests(c: any, token: string) {
 }
 
 async function getDeliverySlots(c: any, token: string) {
-  const { orderUniqueId, requestType } = await c.req.json();
+  const body = await c.req.json();
+  const { orderUniqueId, requestType } = body;
 
   if (!orderUniqueId || !requestType) {
     return c.json({ error: "orderUniqueId and requestType are required" }, 400);
   }
 
-  const response = await fetch(baseurl + "/api/ServiceRequests/getCssSlots", {
-    method: "POST",
-    headers: {
-      authorization: token,
-      "Content-Type": "application/json",
-      "chat-app": "bot9",
-    },
-    body: JSON.stringify({
-      data: {
-        orderUniqueId: orderUniqueId,
-        requestType: requestType,
+  try {
+    const response = await fetch(baseurl + "/api/ServiceRequests/getCssSlots", {
+      method: "POST",
+      headers: {
+        authorization: token,
+        "Content-Type": "application/json",
+        "chat-app": "bot9",
       },
-    }),
-  });
+      body: JSON.stringify({
+        data: {
+          orderUniqueId: orderUniqueId,
+          requestType: requestType,
+        },
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch delivery slots: ${response.statusText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log("Failed to fetch data:", errorText);
+      return c.json({ error: "Failed to fetch data", details: errorText }, 500);
+    }
+
+    const text = await response.text();
+
+    try {
+      const data = JSON.parse(text);
+      return c.json({ results: data });
+    } catch (error) {
+      console.log("Failed to parse JSON response:", error.message);
+      return c.json(
+        { error: "Failed to parse JSON response", details: error.message },
+        500
+      );
+    }
+  } catch (error) {
+    console.log("Request failed:", error.message);
+    return c.json({ error: "Request failed", details: error.message }, 500);
   }
-
-  const data = await response.json();
-  return c.json({ type: "DeliverySlots", data: data });
 }
 
 async function bookCssSlot(c: any, token: string) {
