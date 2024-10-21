@@ -12,8 +12,8 @@ app.get("/api/billingAndPayments", async (c: any) => {
 
   const { invoiceId, userId } = await c.req.json("invoiceId");
 
-  if (!token) {
-    return c.json({ error: "Token is required" }, 400);
+  if (!token || !operation) {
+    return c.json({ error: "Token and operation is required" }, 400);
   }
 
   try {
