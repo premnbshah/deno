@@ -8,117 +8,153 @@ const baseurl = "https://k8s-node.rentomojo.com";
 
 app.get("/api/billingAndPayments", async (c: any) => {
   const token = c.req.query("token");
-  const userId = c.req.query("userId");
-  const invoiceId = c.req.query("invoiceId");
+  const operation = c.req.query("operation");
+
+  const { invoiceId, userId } = await c.req.json("invoiceId");
 
   if (!token) {
     return c.json({ error: "Token is required" }, 400);
   }
 
   try {
-    // GetPendingDues
-    if (userId && !invoiceId) {
-      const response = await fetch(
-        baseurl + `/api/RMUsers/getPendingRentalItemsBreakUp?userId=${userId}`,
-        {
-          headers: {
-            "accept-language": "en-GB,en;q=0.9",
-            authorization: token,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch pending dues: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return c.json({
-        type: "PendingDues",
-        data: data,
-      });
+    switch (operation) {
+      case "getRentalDue":
+        return await getRentalDue(c, token);
+      case "pendingDues":
+        return await getPendingDues(c, token, userId);
+      case "getInvoices":
+        return await getInvoices(c, token);
+      case "getUserInvoice":
+        return await getUserInvoice(c, token, userId, invoiceId);
+      default:
+        return c.json({ error: "Invalid operation" }, 400);
     }
-
-    // GetInvoices
-    if (!userId && !invoiceId) {
-      const response = await fetch(baseurl + `/api/Dashboards/getLedgersData`, {
-        headers: {
-          authorization: token,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch invoices: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const formattedData = data.invoices.map((invoice) => ({
-        id: invoice.id,
-        createdAt: invoice.createdAt,
-        invoiceMonth: invoice.invoiceMonth,
-        invoiceNumber: invoice.invoiceNumber,
-        total: invoice.total,
-        paymentStatus: invoice.paymentStatus === 20 ? "Paid" : "Unpaid",
-        invoicePaidDate: invoice.invoicePaidDate,
-      }));
-
-      return c.json({
-        type: "Invoices",
-        data: { invoices: formattedData },
-      });
-    }
-
-    // GetUserInvoice
-    if (userId && invoiceId) {
-      try {
-        const response = await fetch(
-          baseurl +
-            `/api/RMUsers/${userId}/getUserLedgerInvoice?invoiceId=${invoiceId}&discardGstInvoiceDateCheck=true`,
-          {
-            headers: {
-              authorization: token,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          console.error("Failed to fetch data:", response.statusText);
-          return c.json({ error: "Failed to fetch data" }, 500);
-        }
-
-        const data = await response.json();
-
-        const formattedData = {
-          id: data.id,
-          invoiceDate: data.invoiceDate,
-          userId: data.userId,
-          invoiceNumber: data.invoiceNumber,
-          address: data.address,
-          rentAmount: data.rentAmount,
-          paymentStatus: data.paymentStatus === 20 ? "Paid" : "Unpaid",
-          invoiceUrl: `${baseurl}/dashboard/my-subscriptions/${data.id}/rental-invoice`,
-          orderItemRents: data.orderItemRents.map((orderItemRent) => ({
-            rentAmount: orderItemRent.rentAmount,
-            billingCycleStartDate: orderItemRent.billingCycleStartDate,
-            billingCycleEndDate: orderItemRent.billingCycleEndDate,
-            dueDate: orderItemRent.dueDate,
-            rentalMonth: orderItemRent.rentalMonth,
-            productName: orderItemRent.orderItem.product.name,
-            orderUniqueId: orderItemRent.orderItem.order.uniqueId,
-          })),
-        };
-
-        return c.json(formattedData);
-      } catch (error) {
-        console.error("Request failed:", error.message);
-        return c.json({ error: "Request failed", details: error.message }, 500);
-      }
-    }
-
-    return c.json({ error: "Invalid combination of parameters" }, 400);
   } catch (error) {
     console.error("Request failed:", error.message);
     return c.json({ error: "Request failed", details: error.message }, 500);
+  }
+
+  async function getRentalDue(c: any, token: string) {
+    const response = await fetch(baseurl + "/api/Dashboards/dashboardData", {
+      headers: {
+        accept: "application/json, text/plain, */*",
+        authorization: token,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch rental due data: ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    return c.json({
+      type: "RentalDue",
+      data: {
+        pendingDuesText: data.pendingDuesText,
+        totalPendingRentalDueAmount: data.totalPendingRentalDueAmount,
+        totalPayableAmount: data.totalPayableAmount,
+        pendingLateFeeAmount: data.pendingLateFeeAmount,
+        rentoMoney: data.rentoMoney,
+      },
+    });
+  }
+
+  async function getPendingDues(c: any, token: string, userId: string) {
+    const response = await fetch(
+      baseurl + `/api/RMUsers/getPendingRentalItemsBreakUp?userId=${userId}`,
+      {
+        headers: {
+          "accept-language": "en-GB,en;q=0.9",
+          authorization: token,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch pending dues: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return c.json({
+      type: "PendingDues",
+      data: data,
+    });
+  }
+
+  async function getInvoices(c: any, token: string) {
+    const response = await fetch(baseurl + `/api/Dashboards/getLedgersData`, {
+      headers: {
+        authorization: token,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch invoices: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const formattedData = data.invoices.map((invoice) => ({
+      id: invoice.id,
+      createdAt: invoice.createdAt,
+      invoiceMonth: invoice.invoiceMonth,
+      invoiceNumber: invoice.invoiceNumber,
+      total: invoice.total,
+      paymentStatus: invoice.paymentStatus === 20 ? "Paid" : "Unpaid",
+      invoicePaidDate: invoice.invoicePaidDate,
+    }));
+
+    return c.json({
+      type: "Invoices",
+      data: { invoices: formattedData },
+    });
+  }
+
+  async function getUserInvoice(
+    c: any,
+    token: string,
+    userId: string,
+    invoiceId: string
+  ) {
+    const response = await fetch(
+      baseurl +
+        `/api/RMUsers/${userId}/getUserLedgerInvoice?invoiceId=${invoiceId}&discardGstInvoiceDateCheck=true`,
+      {
+        headers: {
+          authorization: token,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error("Failed to fetch data:", response.statusText);
+      return c.json({ error: "Failed to fetch data" }, 500);
+    }
+
+    const data = await response.json();
+
+    const formattedData = {
+      id: data.id,
+      invoiceDate: data.invoiceDate,
+      userId: data.userId,
+      invoiceNumber: data.invoiceNumber,
+      address: data.address,
+      rentAmount: data.rentAmount,
+      paymentStatus: data.paymentStatus === 20 ? "Paid" : "Unpaid",
+      invoiceUrl: `${baseurl}/dashboard/my-subscriptions/${data.id}/rental-invoice`,
+      orderItemRents: data.orderItemRents.map((orderItemRent) => ({
+        rentAmount: orderItemRent.rentAmount,
+        billingCycleStartDate: orderItemRent.billingCycleStartDate,
+        billingCycleEndDate: orderItemRent.billingCycleEndDate,
+        dueDate: orderItemRent.dueDate,
+        rentalMonth: orderItemRent.rentalMonth,
+        productName: orderItemRent.orderItem.product.name,
+        orderUniqueId: orderItemRent.orderItem.order.uniqueId,
+      })),
+    };
+
+    return c.json(formattedData);
   }
 });
 
