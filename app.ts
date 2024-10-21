@@ -6,7 +6,7 @@ const app = new Hono();
 
 const baseurl = "https://k8s-node.rentomojo.com";
 
-app.get("/api/billingAndPayments", async (c: any) => {
+app.post("/api/billingAndPayments", async (c: any) => {
   const token = c.req.query("token");
   const operation = c.req.query("operation");
 
