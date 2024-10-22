@@ -208,9 +208,6 @@ async function sendToSheety(c: any) {
       userid,
       marketplace,
       warehouseName,
-      city,
-      voiceofCustomer,
-      requestType,
     } = body;
 
     if (!conversationId || !servicerequestId) {
@@ -279,7 +276,7 @@ async function sendToSheety(c: any) {
       };
 
       // Get the city from the body and normalize it
-      const currentCity = city ? city.trim().toLowerCase() : "";
+      const city = body.city ? body.city.trim().toLowerCase() : "";
 
       // Get userIds for the city
       let userIds = cityUserIds[city];
@@ -306,9 +303,9 @@ async function sendToSheety(c: any) {
         variables: {
           userId: userid,
           ticketId: servicerequestId,
-          comment: voiceofCustomer,
-          locationName: currentCity,
-          requestTypeLabel: requestType,
+          comment: body.voiceofCustomer,
+          locationName: body.city,
+          requestTypeLabel: body.requestType,
         },
       };
 
